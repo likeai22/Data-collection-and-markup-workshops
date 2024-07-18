@@ -15,6 +15,11 @@ from tenacity import (
     AsyncRetrying,
 )
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 class Settings(BaseSettings):
     api_key: str = Field(..., env="api_key")
@@ -29,13 +34,8 @@ class Settings(BaseSettings):
 try:
     settings = Settings()
 except ValidationError as e:
-    print(f"Ошибка валидации переменных окружения: {e}")
+    logger.error(f"Ошибка валидации переменных окружения: {e}")
     exit(1)
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 
 class VenueDetails(TypedDict):
@@ -102,15 +102,15 @@ async def get_foursquare_venues(
 def print_venue_details(venues: List[Venue]):
     """Выводит детали заведений в консоль."""
     if not venues:
-        print("Заведения не найдены.")
+        logger.info("Заведения не найдены.")
         return
     for i, venue in enumerate(venues, 1):
-        print(f"{i}. {venue.name}")
-        print(f"   Адрес: {venue.address}")
-        print(
+        logger.info(f"{i}. {venue.name}")
+        logger.info(f"   Адрес: {venue.address}")
+        logger.info(
             f"   Рейтинг: {'{:.1f}'.format(venue.rating) if venue.rating else 'Не указан'}"
         )
-        print("-" * 40)
+        logger.info("-" * 40)
 
 
 @lru_cache(maxsize=128)
@@ -127,16 +127,11 @@ async def async_main(category: str, location: str, limit: int) -> List[Venue]:
             )
         except ClientResponseError as e:
             if e.status == HTTPStatus.UNAUTHORIZED:
-                print(
-                    f"Ошибка авторизации при запросе к Foursquare API. Проверьте ваш API ключ."
-                )
                 logger.error(f"Ошибка авторизации при запросе к Foursquare API: {e}")
             else:
-                print(f"Произошла ошибка при запросе к Foursquare API: {e}")
                 logger.error(f"Произошла ошибка при запросе к Foursquare API: {e}")
             return []
         except ValueError as e:
-            print(f"Получен некорректный ответ от Foursquare API: {e}")
             logger.error(f"Получен некорректный ответ от Foursquare API: {e}")
             return []
 
