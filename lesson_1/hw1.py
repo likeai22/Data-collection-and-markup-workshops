@@ -2,14 +2,19 @@ import asyncio
 import argparse
 from typing import List, TypedDict, Optional
 from dataclasses import dataclass
-import aiohttp
-from aiohttp import ClientSession
+from http import HTTPStatus
+from aiohttp import ClientSession, ClientResponseError
 from dotenv import find_dotenv, load_dotenv
 import logging
 from functools import lru_cache
 from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import (
+    stop_after_attempt,
+    wait_fixed,
+    retry_if_exception_type,
+    AsyncRetrying,
+)
 
 # Загрузка переменных окружения из .env файла
 load_dotenv(find_dotenv(".env"))
@@ -19,6 +24,7 @@ class Settings(BaseSettings):
     api_key: str = Field(..., env="api_key")
     default_location: str = "New York, NY"
     default_limit: int = 10
+    foursquare_api_url: str = "https://api.foursquare.com/v3/places"  # Базовый URL API
 
     class Config:
         env_file = ".env"
@@ -58,34 +64,50 @@ class Venue:
         )
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-async def get_foursquare_venues(
+async def _get_foursquare_venues_data(
     session: ClientSession, category: str, location: str, limit: int
-) -> List[dict]:
-    """Асинхронно получает список заведений от Foursquare API v3."""
-    url = "https://api.foursquare.com/v3/places/search"
+) -> dict:
+    """Получает данные о заведениях от Foursquare API v3."""
+
+    url = f"{settings.foursquare_api_url}/search"
     headers = {"Authorization": settings.api_key, "Accept": "application/json"}
     params = {
         "query": category,
         "near": location,
         "limit": limit,
     }
-    try:
-        async with session.get(url, params=params, headers=headers) as response:
-            response.raise_for_status()
-            data = await response.json()
-            if "results" in data:
-                return data["results"]
-            else:
-                logger.error("Некорректный формат ответа от API")
-                return []
-    except aiohttp.ClientError as e:
-        logger.error(f"Ошибка при выполнении запроса к Foursquare API: {e}")
-        raise
+
+    async with session.get(url, params=params, headers=headers) as response:
+        response.raise_for_status()
+        return await response.json()
+
+
+async def get_foursquare_venues(
+    session: ClientSession, category: str, location: str, limit: int
+) -> List[dict]:
+    """
+    Асинхронно получает список заведений от Foursquare API v3
+    с обработкой ошибок и повторными попытками.
+    """
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        retry=retry_if_exception_type(ClientResponseError),
+        reraise=True,
+    ):
+        with attempt:
+            data = await _get_foursquare_venues_data(session, category, location, limit)
+
+            if "results" not in data:
+                raise ValueError("Некорректный формат ответа от API")
+            return data["results"]
 
 
 def print_venue_details(venues: List[Venue]):
     """Выводит детали заведений в консоль."""
+    if not venues:
+        print("Заведения не найдены.")
+        return
     for i, venue in enumerate(venues, 1):
         print(f"{i}. {venue.name}")
         print(f"   Адрес: {venue.address}")
@@ -102,8 +124,26 @@ def get_cached_venues(category: str, location: str, limit: int) -> List[Venue]:
 
 
 async def async_main(category: str, location: str, limit: int) -> List[Venue]:
-    async with aiohttp.ClientSession() as session:
-        venues_data = await get_foursquare_venues(session, category, location, limit)
+    async with ClientSession() as session:
+        try:
+            venues_data = await get_foursquare_venues(
+                session, category, location, limit
+            )
+        except ClientResponseError as e:
+            if e.status == HTTPStatus.UNAUTHORIZED:
+                print(
+                    f"Ошибка авторизации при запросе к Foursquare API. Проверьте ваш API ключ."
+                )
+                logger.error(f"Ошибка авторизации при запросе к Foursquare API: {e}")
+            else:
+                print(f"Произошла ошибка при запросе к Foursquare API: {e}")
+                logger.error(f"Произошла ошибка при запросе к Foursquare API: {e}")
+            return []
+        except ValueError as e:
+            print(f"Получен некорректный ответ от Foursquare API: {e}")
+            logger.error(f"Получен некорректный ответ от Foursquare API: {e}")
+            return []
+
         return [Venue.from_api_response(venue) for venue in venues_data]
 
 
@@ -127,14 +167,8 @@ def main():
     category = args.category or input("Введите категорию заведений: ")
     location = args.location
 
-    try:
-        venues = get_cached_venues(category, location, args.limit)
-        if venues:
-            print_venue_details(venues)
-        else:
-            print("Заведения не найдены.")
-    except Exception as e:
-        logger.error(f"Произошла ошибка: {e}")
+    venues = get_cached_venues(category, location, args.limit)
+    print_venue_details(venues)
 
 
 if __name__ == "__main__":
