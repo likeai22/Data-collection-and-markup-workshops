@@ -4,7 +4,6 @@ from typing import List, TypedDict, Optional
 from dataclasses import dataclass
 from http import HTTPStatus
 from aiohttp import ClientSession, ClientResponseError
-from dotenv import find_dotenv, load_dotenv
 import logging
 from functools import lru_cache
 from pydantic import Field, ValidationError
@@ -15,9 +14,6 @@ from tenacity import (
     retry_if_exception_type,
     AsyncRetrying,
 )
-
-# Загрузка переменных окружения из .env файла
-load_dotenv(find_dotenv(".env"))
 
 
 class Settings(BaseSettings):
