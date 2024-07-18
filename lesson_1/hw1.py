@@ -1,4 +1,3 @@
-import os
 import asyncio
 import argparse
 from typing import List, TypedDict, Optional
@@ -15,15 +14,9 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 # Загрузка переменных окружения из .env файла
 load_dotenv(find_dotenv(".env"))
 
-# Проверка загрузки переменных окружения
-print(f"FOURSQUARE_CLIENT_ID: {os.getenv('FOURSQUARE_CLIENT_ID')}")
-print(f"FOURSQUARE_CLIENT_SECRET: {os.getenv('FOURSQUARE_CLIENT_SECRET')}")
 
-
-# --- Использование класса настроек Pydantic ---
 class Settings(BaseSettings):
-    client_id: str = Field(..., env="FOURSQUARE_CLIENT_ID")
-    client_secret: str = Field(..., env="FOURSQUARE_CLIENT_SECRET")
+    api_key: str = Field(..., env="api_key")
     default_location: str = "New York, NY"
     default_limit: int = 10
 
@@ -60,8 +53,8 @@ class Venue:
         location = venue.get("location", {})
         return cls(
             name=venue.get("name", "Название не указано"),
-            address=", ".join(location.get("formattedAddress", ["Адрес не указан"])),
-            rating=float(venue.get("rating")) if venue.get("rating") else None,
+            address=location.get("formatted_address", "Адрес не указан"),
+            rating=venue.get("rating"),
         )
 
 
@@ -69,30 +62,32 @@ class Venue:
 async def get_foursquare_venues(
     session: ClientSession, category: str, location: str, limit: int
 ) -> List[dict]:
-    """Асинхронно получает список заведений от Foursquare API."""
-    url = "https://api.foursquare.com/v2/venues/search"
+    """Асинхронно получает список заведений от Foursquare API v3."""
+    url = "https://api.foursquare.com/v3/places/search"
+    headers = {"Authorization": settings.api_key, "Accept": "application/json"}
     params = {
-        "client_id": settings.client_id,
-        "client_secret": settings.client_secret,
-        "v": settings.api_version,
-        "near": location,
         "query": category,
+        "near": location,
         "limit": limit,
     }
     try:
-        async with session.get(url, params=params) as response:
+        async with session.get(url, params=params, headers=headers) as response:
             response.raise_for_status()
             data = await response.json()
-            return data["response"]["venues"]
+            if "results" in data:
+                return data["results"]
+            else:
+                logger.error("Некорректный формат ответа от API")
+                return []
     except aiohttp.ClientError as e:
         logger.error(f"Ошибка при выполнении запроса к Foursquare API: {e}")
-        raise  # Поднимаем исключение для обработки в tenacity
+        raise
 
 
 def print_venue_details(venues: List[Venue]):
     """Выводит детали заведений в консоль."""
-    for i, venue in enumerate(venues):
-        print(f"{i+1}. {venue.name}")
+    for i, venue in enumerate(venues, 1):
+        print(f"{i}. {venue.name}")
         print(f"   Адрес: {venue.address}")
         print(
             f"   Рейтинг: {'{:.1f}'.format(venue.rating) if venue.rating else 'Не указан'}"
@@ -100,7 +95,6 @@ def print_venue_details(venues: List[Venue]):
         print("-" * 40)
 
 
-# --- Кэширование результатов ---
 @lru_cache(maxsize=128)
 def get_cached_venues(category: str, location: str, limit: int) -> List[Venue]:
     """Получает и кэширует результаты запроса."""
