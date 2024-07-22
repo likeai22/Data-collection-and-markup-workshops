@@ -1,10 +1,10 @@
 import asyncio
-import aioch
 import json
 import re
 from functools import lru_cache
 from typing import List, Optional
 
+import aioch
 from aiohttp import ClientSession, ClientTimeout
 from bs4 import BeautifulSoup
 from loguru import logger
