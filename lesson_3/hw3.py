@@ -57,16 +57,6 @@ async def get_mongo_client():
         client.close()
 
 
-@lru_cache
-async def get_clickhouse_client():
-    settings = get_settings()
-    client = AsyncIOMotorClient(settings.clickhouse_uri)
-    try:
-        yield client
-    finally:
-        client.close()
-
-
 async def save_to_mongo(books: List[Book]):
     """Асинхронно сохраняет данные в MongoDB."""
     settings = get_settings()
