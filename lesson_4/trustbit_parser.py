@@ -2,6 +2,7 @@ import requests
 from lxml import html
 import csv
 from fake_useragent import UserAgent
+import flet as ft
 
 # Константы
 URL: str = "https://www.trustbit.tech/en/llm-leaderboard-juli-2024"
@@ -47,7 +48,7 @@ def parse_html(html_content: bytes | None) -> html.HtmlElement | None:
 
 
 def extract_table_data(
-    tree: html.HtmlElement | None,
+        tree: html.HtmlElement | None,
 ) -> tuple[list[str] | None, list[list[str]] | None]:
     """
     Извлекает данные таблицы с помощью XPath выражений.
@@ -72,16 +73,14 @@ def extract_table_data(
     ]  # Извлекаем заголовки
     data = [
         [cell.text.strip() for cell in row.xpath(".//td")]  # Извлекаем данные из ячеек
-        for row in table_rows[
-            1:
-        ]  # Пропускаем первую строку, так как она содержит заголовки
+        for row in table_rows[1:]  # Пропускаем первую строку, так как она содержит заголовки
         if len(row) > 0  # Проверяем, что строка содержит ячейки
     ]
     return headers, data
 
 
 def save_to_csv(
-    filename: str, headers: list[str] | None, data: list[list[str]] | None
+        filename: str, headers: list[str] | None, data: list[list[str]] | None
 ) -> None:
     """
     Сохраняет извлеченные данные в CSV-файл.
@@ -102,23 +101,42 @@ def save_to_csv(
         csvwriter.writerows(data)  # Записываем строки данных
 
 
-def main() -> None:
-    """
-    Основная функция для выполнения веб-скрапинга и извлечения данных.
-    """
-    try:
-        html_content = fetch_html(URL)  # Получаем HTML-контент страницы
-        tree = parse_html(html_content)  # Парсим HTML-контент
-        headers, data = extract_table_data(tree)  # Извлекаем данные таблицы
-        save_to_csv(CSV_FILENAME, headers, data)  # Сохраняем данные в CSV
-        print(f"Данные успешно сохранены в {CSV_FILENAME}")
-    except requests.exceptions.HTTPError as http_err:
-        print(f"Произошла HTTP ошибка: {http_err}")
-    except requests.exceptions.RequestException as req_err:
-        print(f"Произошла ошибка запроса: {req_err}")
-    except Exception as e:
-        print(f"Произошла непредвиденная ошибка: {e}")
+def main(page: ft.Page):
+    page.title = "Web Scraper"
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+
+    url_input = ft.TextField(label="Введите URL", value=URL, width=500)
+    status_label = ft.Text()
+
+    def start_scraping(e):
+        try:
+            url = url_input.value
+            status_label.value = "Получение данных..."
+            page.update()
+
+            html_content = fetch_html(url)
+            tree = parse_html(html_content)
+            headers, data = extract_table_data(tree)
+            save_to_csv(CSV_FILENAME, headers, data)
+            status_label.value = f"Данные успешно сохранены в {CSV_FILENAME}"
+            page.update()
+        except requests.exceptions.HTTPError as http_err:
+            status_label.value = f"Произошла HTTP ошибка: {http_err}"
+            page.update()
+        except requests.exceptions.RequestException as req_err:
+            status_label.value = f"Произошла ошибка запроса: {req_err}"
+            page.update()
+        except Exception as e:
+            status_label.value = f"Произошла непредвиденная ошибка: {e}"
+            page.update()
+
+    page.add(
+        ft.Row(
+            [url_input, ft.ElevatedButton("Начать парсинг", on_click=start_scraping)]
+        ),
+        status_label,
+    )
 
 
 if __name__ == "__main__":
-    main()
+    ft.app(target=main)
