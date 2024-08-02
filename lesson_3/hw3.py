@@ -72,7 +72,7 @@ async def save_to_mongo(books: List[Book]):
 
 async def save_to_clickhouse(books: List[Book]):
     """Асинхронно сохраняет данные в ClickHouse."""
-    settings = Settings()
+    settings = get_settings()
     client = aioch.Client(
         host=settings.clickhouse_host,
         port=settings.clickhouse_port,
