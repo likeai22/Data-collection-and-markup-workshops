@@ -55,7 +55,7 @@ class CSVPipeline(object):
         item_id = self.hash_method(str(item).encode()).hexdigest()
         if item_id not in self.processed_items:
             self.processed_items.add(item_id)
-            logging.info(f"Processing item: {item}")
+            logging.info(f"Обрабатываемый элемент: {item}")
             self.exporter.export_item(item)
         else:
             logging.info(f"Пропуск повторяющегося элемента: {item}")
