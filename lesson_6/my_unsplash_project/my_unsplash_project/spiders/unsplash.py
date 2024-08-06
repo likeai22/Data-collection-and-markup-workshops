@@ -1,45 +1,41 @@
 import scrapy
-from scrapy.linkextractors import LinkExtractor
-from scrapy.spiders import CrawlSpider, Rule
-from urllib.parse import urljoin
+from itemloaders import ItemLoader
+from scrapy.loader.processors import MapCompose, TakeFirst
+
 from ..items import MyUnsplashProjectItem
-
-
-# class UnsplashSpider(CrawlSpider):
-#     name = "unsplash"
-#     allowed_domains = ["www.unsplash.com"]
-#     start_urls = ["https://www.unsplash.com/s/photos/galaxy"]
-#     rules = (
-#         Rule(
-#             LinkExtractor(restrict_xpaths="img[starts-with(@class,'I7OuT')]"),
-#             callback="parse_item",
-#             follow=True
-#         ),
-#     )
-#
-#     def parse_item(self, response):
-#
-#         item = MyUnsplashProjectItem()
-#         image_url = response.xpath('//img[@itemprop="contentUrl"]/@src').get()
-#         item["image_urls"] = [urljoin(response.url, image_url)]
-#         item["title"] = response.xpath('//h1/text()"]').get()
-#         item["category"] = response.url.split("/photos/")[-1].split("/")[0]
-#         print("item", item)
-#         yield item
 
 
 class UnsplashSpider(scrapy.Spider):
     name = "unsplash"
     allowed_domains = ["unsplash.com"]
-    start_urls = ["https://unsplash.com/s/photos/galaxy"]
+    start_urls = [
+        "https://unsplash.com/s/photos/construction"
+    ]  # Пример начального URL, можно изменить на любую категорию
+
+    # rules = (
+    #     Rule(
+    #         LinkExtractor(
+    #             allow=r'/photos/\w+',
+    #             restrict_xpaths='//figure[@data-test="photo-grid-masonry-figure"]//a[@itemprop="contentUrl"]'
+    #         ),
+    #         callback='parse_item',
+    #         follow=True
+    #     ),
+    # ) # таким способом мы соберем ссылки на отдельные страницы картинок,
+    # но парсить с отдельной страницы картинки не так удобно, как с общей
 
     def parse(self, response):
-        for img in response.xpath('//figure//img[starts-with(@class, "I7OuT")]'):
-            item = MyUnsplashProjectItem()
-            image_url = img.xpath("./@src").get()
-            print("image_url", image_url)
-            # item["image_urls"] = [urljoin(response.url, image_url)]
-            # item["title"] = img.xpath('./@alt').get()
-            # item["category"] = "galaxy"
-            # print("item", item)
-            yield item
+        images = response.xpath('//img[@data-test="photo-grid-masonry-img"]')
+
+        for image in images:
+            loader = ItemLoader(item=MyUnsplashProjectItem(), selector=image)
+            loader.default_input_processor = MapCompose(str.strip)
+            loader.default_output_processor = (
+                TakeFirst()
+            )  # Берем первое значение из списка
+            loader.add_xpath(
+                "image_url", "@src", MapCompose(lambda url: url.split("?")[0])
+            )  # Удаляем параметры из URL
+            loader.add_xpath("title", "@alt")
+            loader.add_value("category", response.url.split("/")[-1])
+            yield loader.load_item()

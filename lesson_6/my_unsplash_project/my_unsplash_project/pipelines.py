@@ -2,44 +2,41 @@
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-import csv
-
-# useful for handling different item types with a single interface
+import hashlib
 import scrapy
 from scrapy.exporters import CsvItemExporter
 from scrapy.pipelines.images import ImagesPipeline
 
 
 class MyUnsplashProjectPipeline:
+    def process_item(self, item, spider):
+        return item
+
+
+class CustomImagesPipeline(ImagesPipeline):
+    def file_path(self, request, response=None, info=None, *, item=None):
+        image_guid = hashlib.sha1(request.url.encode()).hexdigest()
+        return f"{item['title']} - {image_guid}.jpg"
+
     def get_media_requests(self, item, info):
-        return [
-            scrapy.Request(x, meta={"item": item}) for x in item.get("image_urls", [])
-        ]
+        yield scrapy.Request(item["image_url"])
 
     def item_completed(self, results, item, info):
-        if "images" in item:
-            for ok, x in results:
-                if ok:
-                    item["images"] = x["path"]
+        if results:
+            item["images"] = [x["path"] for ok, x in results if ok]
         return item
 
 
 class CSVPipeline(object):
     def open_spider(self, spider):
-        self.file = open("unsplash_images.csv", "w", newline="")
-        self.writer = csv.writer(self.file)
-        self.writer.writerow(["image_url", "local_path", "title", "category"])
+        self.file = open("unsplash_images.csv", "wb")
+        self.exporter = CsvItemExporter(self.file)
+        self.exporter.start_exporting()
 
     def close_spider(self, spider):
+        self.exporter.finish_exporting()
         self.file.close()
 
     def process_item(self, item, spider):
-        self.writer.writerow(
-            [
-                item["image_urls"][0],
-                item["images"],
-                item["title"],
-                item["category"],
-            ]
-        )
+        self.exporter.export_item(item)
         return item

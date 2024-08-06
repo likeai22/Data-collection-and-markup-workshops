@@ -12,26 +12,33 @@ BOT_NAME = "my_unsplash_project"
 SPIDER_MODULES = ["my_unsplash_project.spiders"]
 NEWSPIDER_MODULE = "my_unsplash_project.spiders"
 
+LOG_ENABLED = True
+LOG_LEVEL = "DEBUG"
+
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-# USER_AGENT = "my_unsplash_project (+http://www.yourdomain.com)"
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/81.0.4044.114 Safari/537.36"
+)
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-# CONCURRENT_REQUESTS = 32
+CONCURRENT_REQUESTS = 4
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-# DOWNLOAD_DELAY = 3
+DOWNLOAD_DELAY = 1.5
 # The download delay setting will honor only one of:
 # CONCURRENT_REQUESTS_PER_DOMAIN = 16
 # CONCURRENT_REQUESTS_PER_IP = 16
 
 # Disable cookies (enabled by default)
-# COOKIES_ENABLED = False
+COOKIES_ENABLED = True
 
 # Disable Telnet Console (enabled by default)
 # TELNETCONSOLE_ENABLED = False
@@ -63,9 +70,9 @@ ROBOTSTXT_OBEY = True
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-    "scrapy.pipelines.images.ImagesPipeline": 1,
-    "my_unsplash_project.pipelines.MyUnsplashProjectPipeline": 300,
-    "my_unsplash_project.pipelines.CSVPipeline": 400,
+    "my_unsplash_project.pipelines.CustomImagesPipeline": 1,
+    # "my_unsplash_project.pipelines.MyUnsplashProjectPipeline": 300,
+    "my_unsplash_project.pipelines.CSVPipeline": 300,
 }
 
 IMAGES_STORE = "images"
