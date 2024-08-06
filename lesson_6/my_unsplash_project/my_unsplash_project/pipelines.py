@@ -30,20 +30,33 @@ class CustomImagesPipeline(ImagesPipeline):
 
 
 class CSVPipeline(object):
-    def open_spider(self, spider):
-        self.file = open("unsplash_images.csv", "wb")
-        self.exporter = CsvItemExporter(self.file)
-        self.exporter.start_exporting()
+    def __init__(self, filename="unsplash_images.csv", hash_method=hashlib.sha1):
+        self.filename = filename
+        self.hash_method = hash_method
         self.processed_items = set()
 
+    def open_spider(self, spider):
+        try:
+            self.file = open(self.filename, "wb")
+            self.exporter = CsvItemExporter(self.file)
+            self.exporter.start_exporting()
+        except IOError as e:
+            logging.error(f"Ошибка открытия файла: {e}")
+            raise
+
     def close_spider(self, spider):
-        self.exporter.finish_exporting()
-        self.file.close()
+        try:
+            self.exporter.finish_exporting()
+            self.file.close()
+        except Exception as e:
+            logging.error(f"Ошибка закрытия файла: {e}")
 
     def process_item(self, item, spider):
-        item_id = hashlib.sha1(str(item).encode()).hexdigest()
+        item_id = self.hash_method(str(item).encode()).hexdigest()
         if item_id not in self.processed_items:
             self.processed_items.add(item_id)
             logging.info(f"Processing item: {item}")
             self.exporter.export_item(item)
+        else:
+            logging.info(f"Пропуск повторяющегося элемента: {item}")
         return item
