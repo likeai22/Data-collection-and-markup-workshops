@@ -7,6 +7,8 @@ import scrapy
 from scrapy.exporters import CsvItemExporter
 from scrapy.pipelines.images import ImagesPipeline
 
+import logging
+
 
 class MyUnsplashProjectPipeline:
     def process_item(self, item, spider):
@@ -38,5 +40,6 @@ class CSVPipeline(object):
         self.file.close()
 
     def process_item(self, item, spider):
+        logging.info(f"Processing item: {item}")
         self.exporter.export_item(item)
         return item

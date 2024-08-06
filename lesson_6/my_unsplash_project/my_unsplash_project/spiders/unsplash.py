@@ -1,6 +1,6 @@
 import scrapy
 from itemloaders import ItemLoader
-from scrapy.loader.processors import MapCompose, TakeFirst
+from itemloaders.processors import MapCompose, TakeFirst
 
 from ..items import MyUnsplashProjectItem
 

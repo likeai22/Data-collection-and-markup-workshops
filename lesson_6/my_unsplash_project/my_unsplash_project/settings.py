@@ -12,8 +12,8 @@ BOT_NAME = "my_unsplash_project"
 SPIDER_MODULES = ["my_unsplash_project.spiders"]
 NEWSPIDER_MODULE = "my_unsplash_project.spiders"
 
-LOG_ENABLED = True
-LOG_LEVEL = "DEBUG"
+# LOG_ENABLED = True
+# LOG_LEVEL = "DEBUG"
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
@@ -71,7 +71,6 @@ COOKIES_ENABLED = True
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     "my_unsplash_project.pipelines.CustomImagesPipeline": 1,
-    # "my_unsplash_project.pipelines.MyUnsplashProjectPipeline": 300,
     "my_unsplash_project.pipelines.CSVPipeline": 300,
 }
 
