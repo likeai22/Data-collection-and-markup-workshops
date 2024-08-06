@@ -34,12 +34,16 @@ class CSVPipeline(object):
         self.file = open("unsplash_images.csv", "wb")
         self.exporter = CsvItemExporter(self.file)
         self.exporter.start_exporting()
+        self.processed_items = set()
 
     def close_spider(self, spider):
         self.exporter.finish_exporting()
         self.file.close()
 
     def process_item(self, item, spider):
-        logging.info(f"Processing item: {item}")
-        self.exporter.export_item(item)
+        item_id = hashlib.sha1(str(item).encode()).hexdigest()
+        if item_id not in self.processed_items:
+            self.processed_items.add(item_id)
+            logging.info(f"Processing item: {item}")
+            self.exporter.export_item(item)
         return item
