@@ -4,11 +4,12 @@ import unidecode
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from matplotlib.ticker import MaxNLocator
 from pandas.api.types import is_datetime64_any_dtype as is_datetime
 from pandas.api.types import is_categorical_dtype
 from scipy import stats
-
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 # Константы
 TOP_N_CORRELATIONS = 5
@@ -431,9 +432,7 @@ def plot_top_correlations(
     # Построить графики для признаков с наивысшими корреляциями
     f = pd.melt(data, value_vars=top_correlations.index)
     g = sns.FacetGrid(f, col="variable", col_wrap=2, sharex=False, sharey=False)
-    g.map(
-        sns.histplot, "value", kde=True
-    )  # Используем histplot вместо устаревшего distplot для Seaborn
+    g.map(sns.histplot, "value", kde=True)
     plt.show()
 
 
@@ -479,3 +478,221 @@ def encode_qualitative_features(
         encode_categorical_features(frame, q, target)
         qual_encoded.append(q + "_E")
     return qual_encoded
+
+
+def plot_correlation_heatmap(
+    data: pd.DataFrame, figsize: tuple = (20, 20), font_scale: float = 1.1
+):
+    """
+    Построение тепловой карты коэффициентов корреляции для числовых признаков в датафрейме.
+
+    Аргументы:
+    data (pd.DataFrame): Входной датафрейм
+    figsize (tuple): Размер фигуры для графика (по умолчанию (20, 20))
+    font_scale (float): Масштаб шрифта для графика (по умолчанию 1.1)
+
+    Возвращает:
+    None: Функция выводит тепловую карту.
+    """
+    sns.set(font_scale=font_scale)
+    correlation_matrix = data.corr(numeric_only=True)
+    mask = np.triu(
+        np.ones_like(correlation_matrix, dtype=bool)
+    )  # Верхний треугольник маскируется
+
+    plt.figure(figsize=figsize)
+    sns.heatmap(
+        correlation_matrix,
+        annot=True,
+        fmt=".1f",
+        cmap="coolwarm",
+        square=True,
+        mask=mask,
+        linewidths=1,
+        cbar=False,
+    )
+    plt.title(
+        "Тепловая карта коэффициентов корреляции для числовых признаков в датафрейме"
+    )
+    plt.show()
+
+
+def analyze_categorical_correlations(
+    data: pd.DataFrame, alpha: float = 0.05
+) -> pd.DataFrame:
+    """
+    Анализ взаимосвязей между категориальными переменными в датафрейме.
+
+    Аргументы:
+    data (pd.DataFrame): Входной датафрейм
+    alpha (float): Уровень значимости для статистических тестов (по умолчанию 0.05)
+
+    Возвращает:
+    pd.DataFrame: Датафрейм с результатами тестов на независимость для каждой пары категориальных переменных.
+    """
+    categorical_cols = data.select_dtypes(include=["object", "category"]).columns
+    results = []
+
+    for i, col1 in enumerate(categorical_cols):
+        for col2 in categorical_cols[i + 1 :]:
+            contingency_table = pd.crosstab(data[col1], data[col2])
+            chi2, p, _, _ = stats.chi2_contingency(contingency_table)
+            cramers_v = np.sqrt(
+                chi2 / (data.shape[0] * (min(contingency_table.shape) - 1))
+            )
+
+            results.append(
+                {
+                    "Variable 1": col1,
+                    "Variable 2": col2,
+                    "Chi2": chi2,
+                    "p-value": p,
+                    "Cramér's V": cramers_v,
+                    "Significant": p < alpha,
+                }
+            )
+
+    return pd.DataFrame(results).sort_values(by="Cramér's V", ascending=False)
+
+
+def cramers_v_heatmap(
+    data: pd.DataFrame, figsize: tuple = (20, 20), font_scale: float = 1.1
+):
+    """
+    Построение тепловой карты коэффициентов Крамера V для категориальных переменных в датафрейме.
+
+    Аргументы:
+    data (pd.DataFrame): Входной датафрейм
+    figsize (tuple): Размер фигуры для графика (по умолчанию (20, 20))
+    font_scale (float): Масштаб шрифта для графика (по умолчанию 1.1)
+
+    Возвращает:
+    None: Функция выводит тепловую карту.
+    """
+    categorical_cols = data.select_dtypes(include=["object", "category"]).columns
+    n = len(categorical_cols)
+    cramers_v_matrix = np.zeros((n, n))
+
+    for i, col1 in enumerate(categorical_cols):
+        for j, col2 in enumerate(categorical_cols):
+            if i == j:
+                cramers_v_matrix[i, j] = 1.0  # Коэффициент для самой переменной равен 1
+            else:
+                contingency_table = pd.crosstab(data[col1], data[col2])
+                chi2, _, _, _ = stats.chi2_contingency(contingency_table)
+                cramers_v = np.sqrt(
+                    chi2 / (data.shape[0] * (min(contingency_table.shape) - 1))
+                )
+                cramers_v_matrix[i, j] = cramers_v
+
+    cramers_v_df = pd.DataFrame(
+        cramers_v_matrix, index=categorical_cols, columns=categorical_cols
+    )
+
+    sns.set(font_scale=font_scale)
+    plt.figure(figsize=figsize)
+    sns.heatmap(
+        cramers_v_df,
+        annot=True,
+        fmt=".1f",
+        cmap="coolwarm",
+        square=True,
+        linewidths=1,
+        cbar=False,
+    )
+    plt.title(
+        "Тепловая карта коэффициентов Крамера V для категориальных переменных в датафрейме"
+    )
+    plt.show()
+
+
+def encode_features(
+    data: pd.DataFrame,
+    label_encoding_list: list,
+    one_hot_encoding_list: list,
+    cleaned_string_cols: list,
+    cleaned_numeric_cols: list,
+) -> pd.DataFrame:
+    """
+    Кодирует категориальные переменные с использованием Label Encoding и One-Hot Encoding.
+
+    Аргументы:
+    data (pd.DataFrame): Входной датафрейм с категориальными и числовыми переменными.
+    label_encoding_list (list): Список переменных для кодирования с помощью Label Encoding.
+    one_hot_encoding_list (list): Список переменных для кодирования с помощью One-Hot Encoding.
+    cleaned_string_cols (pd.Index): Индекс с именами всех категориальных столбцов.
+    cleaned_numeric_cols (pd.Index): Индекс с именами всех числовых столбцов.
+
+    Возвращает:
+    pd.DataFrame: Датафрейм с закодированными и числовыми переменными.
+    """
+    onehot_encoder = OneHotEncoder(sparse_output=False, drop="first")
+    label_encoder = LabelEncoder()
+
+    encoded_data = pd.DataFrame(
+        index=data.index
+    )  # Инициализация с сохранением индексов
+
+    for col in cleaned_string_cols.columns.tolist():
+        if col in label_encoding_list:
+            # Label Encoding для порядковых переменных
+            encoded_data[col] = label_encoder.fit_transform(data[col])
+        elif col in one_hot_encoding_list:
+            # One-Hot Encoding для номинальных переменных
+            encoded_cols = onehot_encoder.fit_transform(data[[col]])
+            col_names = [f"{col}_{cat}" for cat in onehot_encoder.categories_[0][1:]]
+            encoded_df = pd.DataFrame(encoded_cols, columns=col_names, index=data.index)
+            encoded_data = pd.concat([encoded_data, encoded_df], axis=1)
+        else:
+            # Если переменная не нуждается в кодировании, добавляем её как есть
+            encoded_data[col] = data[col]
+
+    # Добавление числовых переменных обратно в набор данных
+    final_data = pd.concat(
+        [encoded_data, data[cleaned_numeric_cols.columns.tolist()]], axis=1
+    )
+
+    return final_data
+
+
+def plot_distribution_analysis(df: pd.DataFrame, feature: str, title: str) -> None:
+    """
+    Создает комбинированный график распределения, включающий гистограмму, график вероятностей (QQ Plot) и коробчатую диаграмму (Box Plot).
+
+    Аргументы:
+    df (pd.DataFrame): Входной датафрейм с данными.
+    feature (str): Название столбца для анализа.
+    title (str): Заголовок для всего графика.
+
+    Возвращает:
+    None: Функция выводит комбинированный график.
+    """
+    # Инициализация фигуры и сетки для размещения подграфиков
+    fig = plt.figure(constrained_layout=True, figsize=(14, 8))
+    grid = gridspec.GridSpec(ncols=3, nrows=3, figure=fig)
+
+    # Гистограмма и KDE
+    ax1 = fig.add_subplot(grid[0, :2])
+    ax1.set_title("Гистограмма и KDE", fontsize=16)
+    sns.histplot(
+        df[feature].dropna(), kde=True, ax=ax1, color="#e74c3c", stat="density"
+    )
+    sns.kdeplot(df[feature].dropna(), ax=ax1, color="blue", lw=2)
+    ax1.legend(labels=["KDE", "Фактические данные"])
+
+    # QQ Plot
+    ax2 = fig.add_subplot(grid[1, :2])
+    ax2.set_title("График вероятностей (QQ Plot)", fontsize=16)
+    stats.probplot(df[feature].dropna(), dist="norm", plot=ax2)
+    ax2.get_lines()[0].set_markerfacecolor("#e74c3c")
+    ax2.get_lines()[0].set_markersize(8.0)
+
+    # Box Plot
+    ax3 = fig.add_subplot(grid[:, 2])
+    ax3.set_title("Коробчатая диаграмма (Box Plot)", fontsize=16)
+    sns.boxplot(y=df[feature], ax=ax3, color="#e74c3c")
+    ax3.yaxis.set_major_locator(MaxNLocator(nbins=10))
+
+    # Общий заголовок для всей фигуры
+    plt.suptitle(title, fontsize=20)
+    plt.show()
